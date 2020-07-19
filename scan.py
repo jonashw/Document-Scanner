@@ -7,19 +7,63 @@ import glob
 import subprocess
 import pyperclip
 from shutil import copyfile
+import argparse
 
-storage_folder_path = "c:/users/jonashw/Box Sync/scans/"
+scanning_temp_folder_path = "c:\\temp\\rapid-scanner"
+default_storage_path = os.path.join(scanning_temp_folder_path,"scans")
+
+parser = argparse.ArgumentParser(description="Capture and store document scans")
+parser.add_argument("--capture_device_id", default=0, type=int, help="The ID of the capture device to scan with")
+parser.add_argument("--storage_path", default = default_storage_path, help="The final storage location of the scanned PDF")
+parser.add_argument("--list_capture_devices", help="List all working capture devices", action="store_true")
+args = parser.parse_args()
+print(args)
+
+device_id = args.capture_device_id
+storage_folder_path = args.storage_path
+
+def get_capture_devices():
+    """
+    Test the ports and returns a tuple with the available ports and the ones that are working.
+    """
+    is_working = True
+    dev_port = 0
+    working_ports = []
+    available_ports = []
+    while is_working:
+        camera = cv2.VideoCapture(dev_port)
+        if not camera.isOpened():
+            is_working = False
+            print("Port %s is not working." %dev_port)
+        else:
+            is_reading, img = camera.read()
+            w = camera.get(3)
+            h = camera.get(4)
+            if is_reading:
+                print("Port %s is working and reads images (%s x %s)" %(dev_port,h,w))
+                working_ports.append(dev_port)
+            else:
+                print("Port %s for camera ( %s x %s) is present but does not reads." %(dev_port,h,w))
+                available_ports.append(dev_port)
+        dev_port +=1
+    return available_ports,working_ports
+
+if args.list_capture_devices:
+    print("Scanning available capture devices. This may take a minute.  Please wait...")
+    available_devices, working_devices = get_capture_devices()
+    print("Working capture devices =", working_devices)
+    sys.exit()
 
 today = datetime.today()
-id = today.strftime('%Y-%m-%d_%H-%M-%S')
+id       = today.strftime('%Y-%m-%d_%H-%M-%S')
 short_id = today.strftime('%Y%m%d%H%M%S')
-pdf_out_file_path = os.path.join("c:/users/jonashw/scanning/scans", id + ".pdf")
-batch_path = os.path.join("c:/users/jonashw/scanning/scans/batches",id)
-capture_path = os.path.join(batch_path, "capture")
-tailor_path = os.path.join(batch_path, "tailor")
+pdf_out_file_path = os.path.join(scanning_temp_folder_path, id + ".pdf")
+batch_path        = os.path.join(scanning_temp_folder_path,"batches",id)
+capture_path      = os.path.join(batch_path, "capture")
+tailor_path       = os.path.join(batch_path, "tailor")
 
-def do_camera():
-    cam = cv2.VideoCapture(3)#,cv2.CAP_DSHOW)
+def do_camera(device_id):
+    cam = cv2.VideoCapture(device_id)#,cv2.CAP_DSHOW)
     w,h = 2560,1440#3840,2160#1920,1080
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, w)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
@@ -75,7 +119,7 @@ def do_camera():
     cv2.destroyAllWindows()
     return img_paths
 
-capture_paths = do_camera()
+capture_paths = do_camera(device_id)
 
 if len(capture_paths) == 0:
     print("No images captured.  Exiting...")
@@ -87,7 +131,6 @@ raw_filename_from_user = str(input("\n*** File name? ***\n"))
 filename_mantissa, _ = os.path.splitext(raw_filename_from_user)
 dst_path = os.path.join(storage_folder_path, filename_mantissa + "_" + short_id +".pdf")
 os.makedirs(storage_folder_path, exist_ok=True)
-
 
 capture_arg = ' '.join(capture_paths)
 
